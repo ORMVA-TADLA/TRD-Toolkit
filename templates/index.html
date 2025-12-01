@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<title>TRD Toolkits</title>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link rel="shortcut icon" href="/static/ORT.png" type="image/x-icon">
+	<style>
+		body {
+			padding: 48px;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			background-color: lightcyan;
+		}
+
+		#title {
+			text-align: center;
+			margin-bottom: 48px;
+		}
+
+		#uploadForm {
+			display: flex;
+			flex-direction: column;
+			gap: 8px;
+		}
+
+		#uploadForm label {
+			background-color: #008CBA;
+			color: white;
+		}
+
+		#fileInput {
+			visibility: hidden;
+		}
+
+		hr {
+			width: 300px;
+			margin-top: 16px;
+			margin-bottom: 16px;
+		}
+
+		#actions {
+			display: flex;
+			flex-direction: column;
+			align-items: flex-start;
+			gap: 16px;
+		}
+
+		#actions button {
+			background-color: #4CAF50;
+			color: white;
+		}
+
+		button,
+		label {
+			cursor: pointer;
+			width: 300px;
+			height: 32px;
+			display: flex;
+			justify-content: center;
+			align-items: center;
+			font-size: 16px;
+			font-weight: bold;
+			cursor: pointer;
+			background-color: #4CAF50;
+			color: white;
+			border: none;
+			border-radius: 2px;
+		}
+	</style>
+</head>
+
+<body>
+	<h1 id="title">TRD Toolkits</h1>
+
+	<!-- File upload form for Distribution.mdb files -->
+	<form id="uploadForm">
+		<p>Select a Distribution.mdb File:</p>
+		<label for="fileInput">Select</label>
+		<input type="file" id="fileInput" name="file" accept=".mdb" required />
+	</form>
+	<div id="uploadResult"></div>
+	<hr />
+
+	<!-- Action buttons for operations on the uploaded file -->
+	<div id="actions">
+		<button id="get-mv1">Extract MV1</button>
+		<button id="get-mv2">Create MV2</button>
+		<button id="show-grantt-chart">Show Gantt Chart</button>
+	</div>
+	<div id="actionResult"></div>
+
+	<script>
+		/**
+		 * Utility function to trigger downloading of a file from a given URL.
+		 */
+		function downloadURL(url) {
+			const link = document.createElement("a");
+			link.href = url;
+			link.download = ""; // Let the browser decide the filename
+			link.style.display = "none";
+			document.body.appendChild(link);
+			link.click();
+			document.body.removeChild(link);
+		}
+
+		/**
+		 * Utility function to open a given URL (for chart viewing, etc.).
+		 */
+		function clickURL(url) {
+			const link = document.createElement("a");
+			link.href = url;
+			link.style.display = "none";
+			document.body.appendChild(link);
+			link.click();
+			document.body.removeChild(link);
+		}
+
+		// Reference to various DOM elements
+		const fileInput = document.getElementById("fileInput");
+		const uploadResult = document.getElementById("uploadResult");
+		const actionResult = document.getElementById("actionResult");
+
+		/**
+		 * Handle file uploads and display status messages.
+		 */
+		fileInput.onchange = function (e) {
+			e.preventDefault();
+
+			if (!fileInput.files[0]) {
+				uploadResult.innerHTML = "<p>Please select a file.</p>";
+				return;
+			}
+
+			const formData = new FormData();
+			formData.append("file", fileInput.files[0]);
+
+			uploadResult.innerHTML = "<p>Uploading...</p>";
+
+			fetch("/upload", {
+				method: "POST",
+				body: formData,
+			})
+				.then((response) => response.json())
+				.then((data) => {
+					if (data.error) {
+						uploadResult.innerHTML = `<p>Error: ${data.error}</p>`;
+					} else {
+						uploadResult.innerHTML = "<p>Uploaded successfully.</p>";
+					}
+				})
+				.catch((error) => {
+					uploadResult.innerHTML = `<p>Error: ${error}</p>`;
+				});
+		};
+
+		/**
+		 * Extract MV1 data on button click.
+		 */
+		document.getElementById("get-mv1").onclick = function () {
+			fetch("/extract-mv1")
+				.then((response) => {
+					if (response.ok) {
+						actionResult.innerHTML = "<p>MV1 data extracted successfully.</p>";
+						return response.json();
+					} else {
+						actionResult.innerHTML = "<p>Failed to extract MV1 data.</p>";
+					}
+				})
+				.then((data) => {
+					if (!data) return;
+					if (data.error) {
+						actionResult.innerHTML = `<p>Error: ${data.error}</p>`;
+						return;
+					}
+					downloadURL(data.download_url);
+				})
+				.catch((error) => {
+					actionResult.innerHTML = `<p>Error: ${error}</p>`;
+				});
+		};
+
+		/**
+		 * Create MV2 document(s) and provide download links.
+		 */
+		document.getElementById("get-mv2").onclick = function () {
+			fetch("/extract-mv2")
+				.then((response) => {
+					if (response.ok) {
+						actionResult.innerHTML = "<p>MV2 Doc created successfully.</p>";
+						return response.json();
+					} else {
+						actionResult.innerHTML = "<p>Failed to create MV2 Doc.</p>";
+					}
+				})
+				.then((data) => {
+					if (!data) return;
+					if (data.error) {
+						actionResult.innerHTML = `<p>Error: ${data.error}</p>`;
+						return;
+					}
+					for (const url of data.download_urls) {
+						downloadURL(url);
+					}
+				})
+				.catch((error) => {
+					actionResult.innerHTML = `<p>Error: ${error}</p>`;
+				});
+		};
+
+		/**
+		 * Request and display the Gantt chart.
+		 */
+		document.getElementById("show-grantt-chart").onclick = function () {
+			fetch("/create-grantt-chart")
+				.then((response) => response.json())
+				.then((data) => {
+					if (data.error) {
+						actionResult.innerHTML = `<p>Error: ${data.error}</p>`;
+					} else {
+						clickURL("/grantt-chart");
+					}
+				})
+				.catch((error) => {
+					actionResult.innerHTML = `<p>Error: ${error}</p>`;
+				});
+		};
+	</script>
+</body>
+
+</html>

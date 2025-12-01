@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>TRD Toolkits</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="shortcut icon" href="/static/ORT.png" type="image/x-icon">
+
+    <!-- Vis Timeline CSS -->
+    <link href="https://unpkg.com/vis-timeline@latest/styles/vis-timeline-graph2d.min.css" rel="stylesheet"
+        type="text/css" />
+
+    <style>
+        body {
+            padding: 48px;
+            background-color: lightcyan;
+        }
+
+        .home-link {
+            text-decoration: none;
+        }
+
+        .container h1 {
+            color: #333;
+            text-align: center;
+        }
+
+        .container .timeline {
+            width: 100%;
+            height: 100%;
+            border: 1px solid #ddd;
+            background-color: white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .container {
+            max-width: auto;
+            margin: 0 auto;
+        }
+
+        .niveau-Av {
+            background-color: lightpink !important;
+            border-color: lightcoral !important;
+        }
+
+        button,
+        label {
+            cursor: pointer;
+            width: 300px;
+            height: 32px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+
+<body>
+    <a href="/" class="home-link"><button>Return Home</button></a>
+    <div class="container">
+    </div>
+
+    <!-- Vis Timeline JS -->
+    <script src="https://unpkg.com/vis-timeline@latest/standalone/umd/vis-timeline-graph2d.min.js"></script>
+
+    <script>
+        // Get the container element
+        var container = document.querySelector('.container');
+
+        // Configuration options
+        var options = {
+            orientation: 'top',
+            zoomMin: 1000 * 60 * 60 * 16,
+            zoomMax: 1000 * 60 * 60 * 24 * 5,
+            tooltip: {
+                followMouse: true,     // Tooltip follows mouse movement
+                overflowMethod: 'flip', // Prevents tooltip from going outside timeline
+                delay: 300             // Delay in milliseconds before showing tooltip
+            },
+            groupHeightMode: 'fixed',
+            margin: {
+                item: 10, // margin between items
+                axis: 5  // margin between items and the axis
+            }
+        };
+
+        // Load JSON and create timeline
+        fetch('/static/mv1.json')
+            .then(response => response.json())
+            .then(data => {
+                for (let key in data) {
+                    if (data.hasOwnProperty(key)) {
+                        currentData = data[key];
+                        // Create timeline with loaded data
+                        var groups = new vis.DataSet();
+                        var items = new vis.DataSet()
+                        let title = document.createElement('h1');
+                        title.innerText = key + ' Timeline';
+                        container.appendChild(title);
+                        let timelineContainer = document.createElement('div');
+                        timelineContainer.className = 'timeline';
+                        container.appendChild(timelineContainer);
+
+                        group_id = 1;
+                        for (let key in currentData) {
+                            if (currentData.hasOwnProperty(key)) {
+                                groups.add({ id: group_id, content: key });
+                                currentData[key].forEach(function (event, index) {
+                                    if (event.dur == 0) return
+
+                                    let strOpenDate = event.dato2;
+                                    let openHour = event.heureo2;
+                                    let strCloseDate = event.datf2;
+                                    let closeHour = event.heuref2;
+
+                                    let openDate = new Date(strOpenDate.replace(' ', 'T'));
+                                    openDate.setHours(openHour);
+                                    let closeDate = new Date(strCloseDate.replace(' ', 'T'));
+                                    closeDate.setHours(closeHour);
+
+                                    items.add({
+                                        content: event.mleagr,
+                                        start: openDate,
+                                        end: closeDate,
+                                        title: event.mleagr + '<br>' + event.npagr + '<br>' + event.typem + ' - ' + event.debit + 'l/s - ' + event.dur + 'h</br>Start : ' + openDate.toISOString().replace('T', ' ').substring(0, 16) + '<br>End : ' + closeDate.toISOString().replace('T', ' ').substring(0, 16),
+                                        group: group_id,
+                                        className: "niveau-" + event.niveau
+                                    });
+                                });
+                                group_id++;
+                            }
+                        }
+                        // Create the Timeline
+                        var timeline = new vis.Timeline(timelineContainer, items, groups, options);
+                    }
+                }
+            })
+            .catch(error => console.error('Error loading JSON:', error));
+    </script>
+</body>
+
+</html>
