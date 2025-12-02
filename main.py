@@ -3,23 +3,15 @@ from functions import read_mdb_file, table_to_xlsx, groupe_dict, mv1_to_mv2, mv2
 from flask import Flask, render_template, request, jsonify
 from flaskwebgui import FlaskUI
 import pandas as pd
+import tempfile
 import json
 import os
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
 
 # Configure upload folder
-UPLOAD_FOLDER = 'uploads'
+UPLOAD_FOLDER = tempfile.mkdtemp(prefix='TRD_upload')
 FILE_NAME = 'Distribution.mdb'
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER)
-
-if not os.path.exists(app.static_folder):
-    os.makedirs(app.static_folder)
-
-# clean old files
-for f in os.listdir(UPLOAD_FOLDER):
-    os.remove(os.path.join(UPLOAD_FOLDER, f))
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 64 * 1024 * 1024  # 64MB max file size
