@@ -80,6 +80,12 @@ def table_to_xlsx(data, table_name, output_file):
     Save table data to an XLS file.
     """
     df = pd.DataFrame(data[table_name])
+    # changing date string to datetime format for columns 7th and 10th
+    if "dato2" in df.columns:
+        df["dato2"] = pd.to_datetime(df["dato2"])
+    if "datf2" in df.columns:
+        df["datf2"] = pd.to_datetime(df["datf2"])
+    
     df.to_excel(output_file, index=False)
     print(f"Data from table '{table_name}' saved to {output_file}")
     return output_file
