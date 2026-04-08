@@ -141,6 +141,8 @@ def extract_mv2():
         for a_type in types:
             # converting grouped dict to mv2
             mv2, TRD_start_hour, TRD_end_hour = mv1_to_mv2(grouped, a_type)
+            if mv2 == {}:
+                continue
             xlsx_path = os.path.join(
                 static_folder, f'MV2 {TRD_start_hour.strftime("%Y-%m-%d")} {TRD_end_hour.strftime("%Y-%m-%d")} - {a_type}.xlsx')
             # saving mv2 to excel file
