@@ -1,167 +1,152 @@
+import os
+import sys
+import argparse
 import pandas as pd
 import numpy as np
 import openpyxl
-from openpyxl.utils import get_column_letter, range_boundaries
-from openpyxl.worksheet.table import TableColumn
-import argparse
-import sys
+from openpyxl.utils import range_boundaries
 
 
-def process_excel_table(
-    filepath, target_table_name, group_col, val_col, target_col, output_col
-):
-    print(f"\nOpening '{filepath}' and searching for table '{target_table_name}'...")
+# ==========================================
+# 1. DATA EXTRACTION (I/O)
+# ==========================================
+def extract_table_from_excel(filepath, table_name, required_cols):
+    """
+    Opens an Excel file, locates a specific table, and extracts the required
+    columns into a pandas DataFrame.
+    """
+    print(f"\nOpening '{filepath}' and searching for table '{table_name}'...")
 
     try:
-        wb = openpyxl.load_workbook(filepath)
+        wb = openpyxl.load_workbook(filepath, data_only=True)
     except FileNotFoundError:
         print(f"\n[ERROR] The file '{filepath}' could not be found.")
         sys.exit(1)
 
-    # 1. Search all sheets for the specific Table name
     target_ws = None
     target_table = None
     for ws in wb.worksheets:
-        if target_table_name in ws.tables:
+        if table_name in ws.tables:
             target_ws = ws
-            target_table = ws.tables[target_table_name]
+            target_table = ws.tables[table_name]
             break
 
     if not target_table:
-        print(
-            f"\n[ERROR] Could not find a table named '{target_table_name}' in this workbook."
-        )
-        print("Please check the configuration and ensure the table name is correct.")
+        print(f"\n[ERROR] Could not find table '{table_name}'. Check your config.")
         sys.exit(1)
 
-    print(f"Found Table: '{target_table.name}'. Reading specified columns...")
+    print(f"Found Table: '{target_table.name}'. Reading columns...")
 
-    # 2. Get table boundaries and read headers
     min_col, min_row, max_col, max_row = range_boundaries(target_table.ref)
+
     headers = [
         target_ws.cell(row=min_row, column=c).value for c in range(min_col, max_col + 1)
     ]
 
-    # 3. Find the column indexes based on the fixed names
-    try:
-        group_idx = headers.index(group_col)
-        val_idx = headers.index(val_col)
-        target_idx = headers.index(target_col)
-    except ValueError as e:
-        print(
-            f"\n[ERROR] Could not find one of the specified columns in the table headers."
-        )
-        print(f"Expected: '{group_col}', '{val_col}', or '{target_col}'")
-        print(f"Headers found in Excel: {headers}")
-        sys.exit(1)
+    col_indices = {}
+    for col_name in required_cols:
+        try:
+            col_indices[col_name] = headers.index(col_name)
+        except ValueError:
+            print(f"\n[ERROR] Missing column: '{col_name}'. Headers found: {headers}")
+            sys.exit(1)
 
-    # 4. Extract the exact rows of data into a dictionary
     data = []
     for r in range(min_row + 1, max_row + 1):
-        data.append(
-            {
-                "excel_row": r,  # Save the row number so we know exactly where to write back
-                "group": target_ws.cell(row=r, column=min_col + group_idx).value,
-                "val": target_ws.cell(row=r, column=min_col + val_idx).value,
-                "target": target_ws.cell(row=r, column=min_col + target_idx).value,
-            }
-        )
+        row_data = {}
+        for col_name, idx in col_indices.items():
+            row_data[col_name] = target_ws.cell(row=r, column=min_col + idx).value
+        data.append(row_data)
 
-    df = pd.DataFrame(data)
+    return pd.DataFrame(data)
 
-    # 5. Math logic for each group
-    def apply_math(group_df):
-        # 1. Force the target sum to be a clean decimal (float)
-        target_sum = float(group_df["target"].iloc[0])
 
-        # 2. Force the values column to be numbers.
-        # (errors='coerce' turns text/blanks into NaN, fillna(0) turns NaN into 0)
-        clean_vals = pd.to_numeric(group_df["val"], errors="coerce").fillna(0)
-        orig_nums = clean_vals.values
+# ==========================================
+# 2. BUSINESS LOGIC (MATH)
+# ==========================================
+def allocate_proportional_integers(group_df, val_col, target_col, output_col):
+    """
+    Takes a grouped subset of data, scales the values proportionally to hit
+    a target sum, and uses the largest remainder method to ensure integer outputs.
+    """
+    target_sum = float(group_df[target_col].iloc[0])
 
-        orig_sum = np.sum(orig_nums)
+    clean_vals = pd.to_numeric(group_df[val_col], errors="coerce").fillna(0)
+    orig_nums = clean_vals.values
 
-        if orig_sum == 0:
-            group_df["final"] = 0
-            return group_df
+    orig_sum = np.sum(orig_nums)
 
-        exact_vals = orig_nums * (target_sum / orig_sum)
-        base_ints = np.floor(exact_vals).astype(int)
-        remainders = exact_vals - base_ints
-        shortfall = int(target_sum - np.sum(base_ints))
-
-        if shortfall > 0:
-            largest_indices = np.argsort(remainders)[-shortfall:]
-            for idx in largest_indices:
-                base_ints[idx] += 1
-
-        group_df["final"] = base_ints
+    if orig_sum == 0:
+        group_df[output_col] = 0
         return group_df
 
-    # Run the math
-    result_df = df.groupby("group", group_keys=False).apply(apply_math)
+    exact_vals = orig_nums * (target_sum / orig_sum)
+    base_ints = np.floor(exact_vals).astype(int)
+    remainders = exact_vals - base_ints
+    shortfall = int(target_sum - np.sum(base_ints))
 
-    # 6. Write the data directly back into the Excel file
-    print("Calculating and writing data back to the file...")
-    new_col_idx = max_col + 1
+    if shortfall > 0:
+        largest_indices = np.argsort(remainders)[-shortfall:]
+        for idx in largest_indices:
+            base_ints[idx] += 1
 
-    # Write the new Header
-    target_ws.cell(row=min_row, column=new_col_idx).value = output_col
+    group_df[output_col] = base_ints
 
-    # Write the final integers down the new column
-    for index, row in result_df.iterrows():
-        target_ws.cell(row=row["excel_row"], column=new_col_idx).value = row["final"]
-
-    # 7. Update the Table Object settings to include the new column
-    new_col_letter = get_column_letter(new_col_idx)
-    start_cell = target_table.ref.split(":")[0]
-
-    # Expand the table boundaries
-    target_table.ref = f"{start_cell}:{new_col_letter}{max_row}"
-
-    # Tell Excel a new column exists so it doesn't throw a "corrupt table" error
-    new_table_column = TableColumn(
-        id=len(target_table.tableColumns) + 1, name=output_col
-    )
-    target_table.tableColumns.append(new_table_column)
-
-    # Save and overwrite the original file
-    wb.save(filepath)
-    print(
-        f"\n[SUCCESS] Added column '{output_col}' to table '{target_table.name}' in {filepath}"
-    )
+    return group_df
 
 
-if __name__ == "__main__":
-    # ==========================================
-    # CONFIGURATION: Set your fixed table and column names here
-    # ==========================================
-    TABLE_NAME = "PC"  # Replace with your exact Excel Table name
-    GROUP_COL_NAME = "Ref"  # Replace with your exact header name
-    VAL_COL_NAME = "Hours static"  # Replace with your exact header name
-    TARGET_COL_NAME = "Target Sum"  # Replace with your exact header name
-    OUTPUT_COL_NAME = "Hours final"  # The name for the new column
-    # ==========================================
-
-    help_text = f"""
-Reads an Excel Table Object, finds specific fixed columns by name, 
-scales the numbers, and appends a newly created column to the table.
-
-Fixed Configuration Expected:
-  Table Name    : '{TABLE_NAME}'
-  Group Column  : '{GROUP_COL_NAME}'
-  Values Column : '{VAL_COL_NAME}'
-  Target Column : '{TARGET_COL_NAME}'
-  Output Column : '{OUTPUT_COL_NAME}'
+# ==========================================
+# 3. ORCHESTRATION (MAIN WORKFLOW)
+# ==========================================
+def process_data(
+    filepath, target_table_name, id_col, group_col, val_col, target_col, output_col
+):
     """
+    Coordinates the extraction, calculation, and exporting of the data.
+    """
+    required_cols = [id_col, group_col, val_col, target_col]
+
+    df = extract_table_from_excel(filepath, target_table_name, required_cols)
+
+    print("Calculating final numbers...")
+
+    result_df = df.groupby(group_col, group_keys=False).apply(
+        lambda g: allocate_proportional_integers(g, val_col, target_col, output_col)
+    )
+
+    # [CHANGED]: Swapped group_col and id_col so the ID is the 2nd column
+    final_column_order = [group_col, id_col, val_col, target_col, output_col]
+    result_df = result_df[final_column_order]
+
+    base_name, _ = os.path.splitext(filepath)
+    output_csv_path = f"{base_name}_output.csv"
+
+    result_df.to_csv(output_csv_path, index=False)
+
+    print(f"\n[SUCCESS] Calculations complete. Data saved to '{output_csv_path}'")
+
+
+# ==========================================
+# 4. CLI ENTRY POINT
+# ==========================================
+if __name__ == "__main__":
+    # ------------------------------------------
+    # CONFIGURATION: Set your fixed target names
+    # ------------------------------------------
+    TABLE_NAME = "PC"
+    ID_COL_NAME = "Code Parcelle"
+    GROUP_COL_NAME = "Ref"
+    VAL_COL_NAME = "Hours static"
+    TARGET_COL_NAME = "Target Sum"
+    OUTPUT_COL_NAME = "Hours final"
+    # ------------------------------------------
 
     parser = argparse.ArgumentParser(
-        description=help_text,
+        description="Reads an Excel table, scales numbers to integers, and exports to CSV.",
         formatter_class=argparse.RawTextHelpFormatter,
         epilog="Example usage: python scale_table.py my_data.xlsx",
     )
 
-    # Using nargs="?" makes the filepath argument optional from the command line
     parser.add_argument(
         "filepath",
         nargs="?",
@@ -170,19 +155,18 @@ Fixed Configuration Expected:
 
     args = parser.parse_args()
 
-    # Check if the user provided the filepath argument. If not, prompt them for it.
     target_filepath = args.filepath
     if not target_filepath:
         target_filepath = input("Please enter the path to your Excel file: ").strip()
 
-        # If the user just presses Enter without typing anything, exit cleanly
         if not target_filepath:
             print("\n[ERROR] No file path provided. Exiting.")
             sys.exit(1)
 
-    process_excel_table(
+    process_data(
         filepath=target_filepath,
         target_table_name=TABLE_NAME,
+        id_col=ID_COL_NAME,
         group_col=GROUP_COL_NAME,
         val_col=VAL_COL_NAME,
         target_col=TARGET_COL_NAME,
