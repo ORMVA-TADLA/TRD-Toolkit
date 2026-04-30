@@ -113,6 +113,11 @@ def process_data(
     result_df = df.groupby(group_col, group_keys=False).apply(
         lambda g: allocate_proportional_integers(g, val_col, target_col, output_col)
     )
+    
+    # Restores the grouping column if newer pandas versions dropped it
+    if group_col not in result_df.columns:
+        result_df[group_col] = df[group_col]
+    # ---------------------------
 
     # [CHANGED]: Swapped group_col and id_col so the ID is the 2nd column
     final_column_order = [group_col, id_col, val_col, target_col, output_col]
