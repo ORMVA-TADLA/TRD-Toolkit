@@ -122,9 +122,9 @@
                                     let closeHour = event.heuref2;
 
                                     let openDate = new Date(strOpenDate.replace(' ', 'T'));
-                                    openDate.setHours(openHour);
+                                    openDate.setHours(openHour + 1);
                                     let closeDate = new Date(strCloseDate.replace(' ', 'T'));
-                                    closeDate.setHours(closeHour);
+                                    closeDate.setHours(closeHour + 1);
 
                                     items.add({
                                         content: event.mleagr,
