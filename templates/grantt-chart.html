@@ -8,8 +8,7 @@
     <link rel="shortcut icon" href="/static/ORT.png" type="image/x-icon">
 
     <!-- Vis Timeline CSS -->
-    <link href="/static/vis-timeline-graph2d.min.css" rel="stylesheet"
-        type="text/css" />
+    <link href="/static/vis-timeline-graph2d.min.css" rel="stylesheet" type="text/css" />
 
     <style>
         body {
@@ -122,15 +121,15 @@
                                     let closeHour = event.heuref2;
 
                                     let openDate = new Date(strOpenDate.replace(' ', 'T'));
-                                    openDate.setHours(openHour + 1);
+                                    openDate.setHours(openHour);
                                     let closeDate = new Date(strCloseDate.replace(' ', 'T'));
-                                    closeDate.setHours(closeHour + 1);
+                                    closeDate.setHours(closeHour);
 
                                     items.add({
                                         content: event.mleagr,
                                         start: openDate,
                                         end: closeDate,
-                                        title: event.mleagr + '<br>' + event.npagr + '<br>' + event.typem + ' - ' + event.debit + 'l/s - ' + event.dur + 'h</br>Start : ' + openDate.toISOString().replace('T', ' ').substring(0, 16) + '<br>End : ' + closeDate.toISOString().replace('T', ' ').substring(0, 16),
+                                        title: event.mleagr + '<br>' + event.npagr + '<br>' + event.typem + ' - ' + event.debit + 'l/s - ' + event.dur + 'h</br>Start : ' + openDate.toLocaleString().substring(0, 17).replace(',', ' ') + '<br>End : ' + closeDate.toLocaleString().substring(0, 17).replace(',', ' '),
                                         group: group_id,
                                         className: "niveau-" + event.niveau
                                     });
